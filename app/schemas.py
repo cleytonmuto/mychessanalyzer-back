@@ -7,6 +7,19 @@ class AnalyzeRequest(BaseModel):
     fen: str = Field(min_length=15, max_length=128)
 
 
+class ReviewRequest(BaseModel):
+    fen: str = Field(min_length=15, max_length=128)
+    depth: int = Field(default=10, ge=1, le=16)
+
+
+class ReviewReply(BaseModel):
+    best_move_uci: str | None
+    best_move_san: str | None
+    score_type: str
+    score_value: int | None
+    depth: int
+
+
 class PlayRequest(BaseModel):
     fen: str = Field(min_length=15, max_length=128)
     depth: int = Field(default=10, ge=1, le=16)

@@ -13,7 +13,18 @@ from app.config import settings
 from app.database import get_db, prepare_database
 from app.engine import position_error, stockfish
 from app.models import Analysis, SavedGame, SavedPosition
-from app.schemas import AnalysisRead, AnalyzeRequest, GameCreate, GameRead, PlayReply, PlayRequest, PositionCreate, PositionRead
+from app.schemas import (
+    AnalysisRead,
+    AnalyzeRequest,
+    GameCreate,
+    GameRead,
+    PlayReply,
+    PlayRequest,
+    PositionCreate,
+    PositionRead,
+    ReviewReply,
+    ReviewRequest,
+)
 
 
 @asynccontextmanager
@@ -97,6 +108,29 @@ def board_for_play(fen: str, sans: list[str]) -> chess.Board:
     if error:
         raise HTTPException(status_code=422, detail=error)
     return board
+
+
+@app.post("/api/review", response_model=ReviewReply)
+def review_position(payload: ReviewRequest) -> ReviewReply:
+    board = read_board(payload.fen.strip())
+    if board.is_checkmate():
+        white_won = board.turn == chess.BLACK
+        return ReviewReply(best_move_uci=None, best_move_san=None, score_type="mate", score_value=1 if white_won else -1, depth=0)
+    if board.is_game_over(claim_draw=True):
+        return ReviewReply(best_move_uci=None, best_move_san=None, score_type="cp", score_value=0, depth=0)
+    try:
+        result = stockfish.judge(board, payload.depth)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Stockfish was not found. Check STOCKFISH_PATH.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Stockfish could not review this position.") from exc
+    return ReviewReply(
+        best_move_uci=result.best_move_uci,
+        best_move_san=result.best_move_san,
+        score_type=result.score_type,
+        score_value=result.score_value,
+        depth=result.depth,
+    )
 
 
 @app.post("/api/play", response_model=PlayReply)

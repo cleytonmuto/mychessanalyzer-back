@@ -208,6 +208,12 @@ class StockfishService:
             result.mate_line = _mating_line(board, info, self._require(), self.depth)
         return result
 
+    def judge(self, board: chess.Board, depth: int) -> EngineResult:
+        depth = max(1, min(depth, 16))
+        with self._lock:
+            info = self._search(board, depth)[0]
+            return _result_from_info(board, info, depth)
+
     def reply(self, board: chess.Board, depth: int) -> EngineResult:
         if board.is_game_over():
             return _terminal_result(board)
