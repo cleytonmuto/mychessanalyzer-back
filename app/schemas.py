@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,6 +19,42 @@ class ReviewReply(BaseModel):
     score_type: str
     score_value: int | None
     depth: int
+
+
+class RobotStateIn(BaseModel):
+    side: Literal["w", "b"]
+    from_top: bool
+    fen: str = Field(min_length=15, max_length=128)
+    sans: list[str] = Field(default_factory=list, max_length=512)
+    your_turn: bool
+    thinking: bool
+    result: str | None = None
+    review_only: bool = False
+    notice: str = ""
+    orientation: Literal["white", "black"]
+
+
+class RobotSession(RobotStateIn):
+    id: str
+
+
+class RobotCommandCreate(BaseModel):
+    kind: Literal["start", "move"]
+    side: Literal["w", "b"] | None = None
+    from_top: bool | None = None
+    san: str | None = Field(default=None, max_length=16)
+
+
+class RobotCommand(BaseModel):
+    id: int
+    kind: Literal["start", "move"]
+    side: Literal["w", "b"] | None = None
+    from_top: bool | None = None
+    san: str | None = None
+
+
+class RobotPushResult(BaseModel):
+    commands: list[RobotCommand]
 
 
 class PlayRequest(BaseModel):

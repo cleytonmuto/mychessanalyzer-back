@@ -13,6 +13,7 @@ from app.config import settings
 from app.database import get_db, prepare_database
 from app.engine import position_error, stockfish
 from app.models import Analysis, SavedGame, SavedPosition
+from app.robot_hub import robot_hub
 from app.schemas import (
     AnalysisRead,
     AnalyzeRequest,
@@ -24,6 +25,11 @@ from app.schemas import (
     PositionRead,
     ReviewReply,
     ReviewRequest,
+    RobotCommand,
+    RobotCommandCreate,
+    RobotPushResult,
+    RobotSession,
+    RobotStateIn,
 )
 
 
@@ -213,3 +219,44 @@ def create_game(payload: GameCreate, db: Session = Depends(get_db)) -> SavedGame
     db.commit()
     db.refresh(row)
     return row
+
+
+def _missing_session(session_id: str) -> HTTPException:
+    return HTTPException(status_code=404, detail=f"Play window {session_id} is not connected.")
+
+
+@app.post("/api/robot/sessions", response_model=RobotSession)
+def open_robot_session() -> RobotSession:
+    return robot_hub.open()
+
+
+@app.get("/api/robot/sessions", response_model=list[RobotSession])
+def list_robot_sessions() -> list[RobotSession]:
+    return robot_hub.list_sessions()
+
+
+@app.put("/api/robot/sessions/{session_id}", response_model=RobotPushResult)
+def push_robot_session(session_id: str, payload: RobotStateIn) -> RobotPushResult:
+    try:
+        commands = robot_hub.push(session_id, payload)
+    except KeyError as exc:
+        raise _missing_session(session_id) from exc
+    return RobotPushResult(commands=commands)
+
+
+@app.post("/api/robot/sessions/{session_id}/commands", response_model=RobotCommand)
+def enqueue_robot_command(session_id: str, payload: RobotCommandCreate) -> RobotCommand:
+    if payload.kind == "start" and payload.side is None:
+        raise HTTPException(status_code=422, detail="Choose the color the robot will play.")
+    if payload.kind == "move" and not payload.san:
+        raise HTTPException(status_code=422, detail="The robot did not send a move.")
+    try:
+        return robot_hub.enqueue(session_id, payload)
+    except KeyError as exc:
+        raise _missing_session(session_id) from exc
+
+
+@app.delete("/api/robot/sessions/{session_id}")
+def close_robot_session(session_id: str) -> dict[str, str]:
+    robot_hub.close(session_id)
+    return {"status": "closed"}
